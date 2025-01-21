@@ -9,12 +9,13 @@ import {PackageManagerInfo} from './package-managers';
 import {getCacheDirectoryPath, getPackageManagerInfo} from './cache-utils';
 
 export const restoreCache = async (
+  versionSpec: string,
   packageManager: string,
   cacheDependencyPath?: string
 ) => {
   const packageManagerInfo = await getPackageManagerInfo(packageManager);
   const platform = process.env.RUNNER_OS;
-  const versionSpec = core.getInput('go-version');
+  const arch = process.arch;
 
   const cachePaths = await getCacheDirectoryPath(packageManagerInfo);
 
@@ -29,7 +30,9 @@ export const restoreCache = async (
     );
   }
 
-  const primaryKey = `setup-go-${platform}-go-${versionSpec}-${fileHash}`;
+  const linuxVersion =
+    process.env.RUNNER_OS === 'Linux' ? `${process.env.ImageOS}-` : '';
+  const primaryKey = `setup-go-${platform}-${arch}-${linuxVersion}go-${versionSpec}-${fileHash}`;
   core.debug(`primary key is ${primaryKey}`);
 
   core.saveState(State.CachePrimaryKey, primaryKey);
@@ -48,7 +51,7 @@ export const restoreCache = async (
 };
 
 const findDependencyFile = (packageManager: PackageManagerInfo) => {
-  let dependencyFile = packageManager.dependencyFilePattern;
+  const dependencyFile = packageManager.dependencyFilePattern;
   const workspace = process.env.GITHUB_WORKSPACE!;
   const rootContent = fs.readdirSync(workspace);
 

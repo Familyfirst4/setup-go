@@ -12,20 +12,32 @@ process.on('uncaughtException', e => {
   core.info(`${warningPrefix}${e.message}`);
 });
 
-export async function run() {
+// Added early exit to resolve issue with slow post action step:
+// - https://github.com/actions/setup-node/issues/878
+// https://github.com/actions/cache/pull/1217
+export async function run(earlyExit?: boolean) {
   try {
-    await cachePackages();
+    const cacheInput = core.getBooleanInput('cache');
+    if (cacheInput) {
+      await cachePackages();
+
+      if (earlyExit) {
+        process.exit(0);
+      }
+    }
   } catch (error) {
-    core.setFailed(error.message);
+    let message = 'Unknown error!';
+    if (error instanceof Error) {
+      message = error.message;
+    }
+    if (typeof error === 'string') {
+      message = error;
+    }
+    core.warning(message);
   }
 }
 
 const cachePackages = async () => {
-  const cacheInput = core.getBooleanInput('cache');
-  if (!cacheInput) {
-    return;
-  }
-
   const packageManager = 'default';
 
   const state = core.getState(State.CacheMatchedKey);
@@ -40,7 +52,8 @@ const cachePackages = async () => {
   );
 
   if (nonExistingPaths.length === cachePaths.length) {
-    throw new Error(`There are no cache folders on the disk`);
+    core.warning('There are no cache folders on the disk');
+    return;
   }
 
   if (nonExistingPaths.length) {
@@ -49,6 +62,13 @@ const cachePackages = async () => {
         ', '
       )}`
     );
+  }
+
+  if (!primaryKey) {
+    core.info(
+      'Primary key was not generated. Please check the log messages above for more errors or information'
+    );
+    return;
   }
 
   if (primaryKey === state) {
@@ -65,9 +85,9 @@ const cachePackages = async () => {
   core.info(`Cache saved with the key: ${primaryKey}`);
 };
 
-export function logWarning(message: string): void {
+function logWarning(message: string): void {
   const warningPrefix = '[warning]';
   core.info(`${warningPrefix}${message}`);
 }
 
-run();
+run(true);
